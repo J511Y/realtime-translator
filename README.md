@@ -1,36 +1,73 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Realtime Translator (포르투갈 여행 실시간 번역기)
 
-## Getting Started
+포르투갈 여행자를 위한 실시간 음성 및 이미지 번역 웹 애플리케이션입니다.
 
-First, run the development server:
+## 🚀 기술 스택
+
+- **Framework**: Next.js 15+ (App Router)
+- **Language**: TypeScript (Strict Mode)
+- **Styling**: Tailwind CSS
+- **Realtime Audio**: OpenAI Realtime API
+- **OCR/Vision**: Google Vision API / Gemini Vision
+- **Testing**: Jest, React Testing Library, Playwright
+- **CI/CD**: GitHub Actions
+
+## 🛠️ 개발 환경 설정
+
+### 사전 요구 사항
+
+- Node.js 20+
+- npm
+
+### 설치 및 실행
 
 ```bash
+# 의존성 설치
+npm install
+
+# 브라우저 설치 (Playwright)
+npx playwright install chromium
+
+# 로컬 개발 서버 실행
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 환경 변수 설정
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+`.env.example` 파일을 복사하여 `.env.local` 파일을 생성하고 필요한 API 키를 입력하세요.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+cp .env.example .env.local
+```
 
-## Learn More
+## 🧪 테스트 및 품질 관리
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+# Lint 검사 및 수정
+npm run lint
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+# 타입 체크
+npm run type-check
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+# 단위 테스트 실행 (Jest)
+npm test
 
-## Deploy on Vercel
+# E2E 테스트 실행 (Playwright)
+npm run test:e2e
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## 🏗️ 아키텍처 규칙
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+본 프로젝트는 레이어드 아키텍처를 따르며, 각 레이어간 참조 규칙이 엄격히 제한됩니다. (AGENTS.md 참조)
+
+- `app/`, `components/`: UI 레이어
+- `services/`: 비즈니스 로직 및 오케스트레이션
+- `lib/`: 외부 SDK 및 기술 구현
+- `repositories/`: 데이터 접근 계층
+
+## 🤝 협업 가이드
+
+- **커밋 컨벤션**: Conventional Commits 준수
+- **코드 스타일**: Prettier 및 ESLint 자동 적용 (저장 시 자동 수정 권장)
+- **PR 규칙**: 모든 테스트 통과 및 AGENTS.md 가이드라인 준수 필수
+- **주석**: 모든 주석과 Docstring은 **한국어**로 작성합니다.

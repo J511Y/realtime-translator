@@ -1,0 +1,25 @@
+name: '✨ Feature Request'
+description: 'Suggest an idea for this project'
+labels: ['feature']
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: 'Summary'
+      description: 'What is the feature you are suggesting?'
+    validations:
+      required: true
+  - type: textarea
+    id: motivation
+    attributes:
+      label: 'Motivation'
+      description: 'Why is this feature needed?'
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: 'Proposed Solution'
+      description: 'How do you imagine the implementation?'
+    validations:
+      required: true
