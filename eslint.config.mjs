@@ -54,6 +54,9 @@ const eslintConfig = defineConfig([
       'no-var': 'error',
       'object-shorthand': 'error',
       'prefer-template': 'error',
+
+      // Jest 설정 파일 등에서 CommonJS require 허용
+      '@typescript-eslint/no-require-imports': 'off',
     },
     settings: {
       'boundaries/elements': [
