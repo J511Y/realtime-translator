@@ -1,29 +1,19 @@
 'use client';
 
 /**
- * 양방향 실시간 통역 인터페이스
+ * 실시간 통역 인터페이스 (단일 마이크, 자동 연결)
  *
- * 구글 번역 앱 스타일의 상단/하단 분할 화면으로
- * 두 화자가 마주보며 각자의 언어로 대화할 수 있습니다.
+ * - 페이지 로드 시 자동으로 마이크 입력 시작
+ * - 상단: 타겟언어 번역 히스토리 (180도 회전)
+ * - 하단: 한국어 원문 히스토리
+ * - 히스토리는 항상 유지됨
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useRealtimeTranslation } from '@/lib/hooks/useRealtimeTranslation';
-import type {
-  SupportedLanguage,
-  VoiceType,
-  TranslationHistoryItem,
-} from '@/types/realtime';
+import type { SupportedLanguage, VoiceType } from '@/types/realtime';
 import { ConnectionStatus } from './ConnectionStatus';
 import { getLanguageInfo } from './LanguageSelector';
-
-/** 사용 가능한 음성 목록 */
-const AVAILABLE_VOICES: { value: VoiceType; label: string }[] = [
-  { value: 'verse', label: 'Verse' },
-  { value: 'alloy', label: 'Alloy' },
-  { value: 'echo', label: 'Echo' },
-  { value: 'shimmer', label: 'Shimmer' },
-];
 
 export interface DualTranslationInterfaceProps {
   /** 기본 언어 A (한국어 베이스) */
@@ -36,14 +26,16 @@ export interface DualTranslationInterfaceProps {
   className?: string;
 }
 
-/** 대화 히스토리 아이템 (방향 포함) */
-interface ConversationItem extends TranslationHistoryItem {
-  /** 발화자 언어 (A 또는 B) */
-  speaker: 'A' | 'B';
+/** 히스토리 아이템 */
+interface HistoryItem {
+  id: string;
+  timestamp: number;
+  koreanText: string;
+  translatedText: string;
 }
 
 /**
- * 양방향 실시간 통역 인터페이스 컴포넌트
+ * 실시간 통역 인터페이스 컴포넌트
  */
 export function DualTranslationInterface({
   languageA = 'ko',
@@ -51,13 +43,11 @@ export function DualTranslationInterface({
   defaultVoice = 'verse',
   className = '',
 }: DualTranslationInterfaceProps) {
-  // 현재 활성 화자 (A: 한국어 화자, B: 대상 언어 화자)
-  const [activeSpeaker, setActiveSpeaker] = useState<'A' | 'B' | null>(null);
-  const [voice, setVoice] = useState<VoiceType>(defaultVoice);
-  const [showSettings, setShowSettings] = useState(false);
+  const [voice] = useState<VoiceType>(defaultVoice);
 
-  // 대화 히스토리 (양방향 통합)
-  const [conversation, setConversation] = useState<ConversationItem[]>([]);
+  // 히스토리 (컴포넌트 레벨에서 관리 - Hook과 분리)
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const historyRef = useRef<HistoryItem[]>([]);
 
   // 실시간 번역 Hook
   const {
@@ -73,99 +63,87 @@ export function DualTranslationInterface({
     clearError,
   } = useRealtimeTranslation({
     onTranslationComplete: item => {
-      // 번역 완료 시 대화 히스토리에 추가
-      if (activeSpeaker) {
-        const conversationItem: ConversationItem = {
-          ...item,
-          speaker: activeSpeaker,
-        };
-        setConversation(prev => [...prev, conversationItem].slice(-50));
-      }
+      // 번역 완료 시 히스토리에 추가 (ref 사용으로 최신 상태 보장)
+      const newItem: HistoryItem = {
+        id: item.id,
+        timestamp: item.timestamp,
+        koreanText: item.inputText,
+        translatedText: item.outputText,
+      };
+      historyRef.current = [...historyRef.current, newItem].slice(-100);
+      setHistory(historyRef.current);
     },
   });
 
   const isConnected = connectionState === 'connected';
   const isConnecting = connectionState === 'connecting';
+  const isFailed = connectionState === 'failed';
 
   // Refs for auto-scroll
-  const historyRefA = useRef<HTMLDivElement>(null);
-  const historyRefB = useRef<HTMLDivElement>(null);
+  const koreanHistoryRef = useRef<HTMLDivElement>(null);
+  const translatedHistoryRef = useRef<HTMLDivElement>(null);
+
+  // 자동 연결 (페이지 로드 시)
+  const didAutoConnectRef = useRef(false);
+  useEffect(() => {
+    if (didAutoConnectRef.current) return;
+    didAutoConnectRef.current = true;
+
+    // 약간의 딜레이 후 자동 연결
+    const timer = setTimeout(() => {
+      connect(languageA, languageB, voice);
+    }, 500);
+
+    return () => {
+      clearTimeout(timer);
+      disconnect();
+    };
+  }, [connect, disconnect, languageA, languageB, voice]);
 
   // 히스토리 자동 스크롤
   useEffect(() => {
-    if (historyRefA.current) {
-      historyRefA.current.scrollTop = historyRefA.current.scrollHeight;
+    if (koreanHistoryRef.current) {
+      koreanHistoryRef.current.scrollTop =
+        koreanHistoryRef.current.scrollHeight;
     }
-    if (historyRefB.current) {
-      historyRefB.current.scrollTop = historyRefB.current.scrollHeight;
+    if (translatedHistoryRef.current) {
+      translatedHistoryRef.current.scrollTop =
+        translatedHistoryRef.current.scrollHeight;
     }
-  }, [conversation]);
+  }, [history, inputTranscript, outputTranscript]);
 
   /**
-   * 화자 A (한국어) 시작
+   * 재연결
    */
-  const handleStartSpeakerA = useCallback(async () => {
-    if (isConnected) {
-      disconnect();
-    }
-    setActiveSpeaker('A');
+  const handleReconnect = useCallback(async () => {
     await connect(languageA, languageB, voice);
-  }, [isConnected, disconnect, connect, languageA, languageB, voice]);
-
-  /**
-   * 화자 B (대상 언어) 시작
-   */
-  const handleStartSpeakerB = useCallback(async () => {
-    if (isConnected) {
-      disconnect();
-    }
-    setActiveSpeaker('B');
-    await connect(languageB, languageA, voice);
-  }, [isConnected, disconnect, connect, languageA, languageB, voice]);
-
-  /**
-   * 통역 중지
-   */
-  const handleStop = useCallback(() => {
-    disconnect();
-    setActiveSpeaker(null);
-  }, [disconnect]);
+  }, [connect, languageA, languageB, voice]);
 
   /**
    * 대화 초기화
    */
-  const handleClearConversation = useCallback(() => {
-    setConversation([]);
+  const handleClearHistory = useCallback(() => {
+    historyRef.current = [];
+    setHistory([]);
   }, []);
 
   const langAInfo = getLanguageInfo(languageA);
   const langBInfo = getLanguageInfo(languageB);
 
-  // 현재 번역 중인 텍스트 (화자에 따라 다르게 표시)
-  const currentInput = inputTranscript;
-  const currentOutput = outputTranscript;
-
   return (
     <div className={`flex flex-col h-screen bg-gray-900 ${className}`}>
-      {/* ========== 상단 영역 (화자 B용 - 180도 회전) ========== */}
+      {/* ========== 상단 영역 (타겟언어 번역 - 180도 회전) ========== */}
       <div className="flex-1 flex flex-col rotate-180 border-b-4 border-gray-700">
-        <SpeakerPanel
-          language={languageB}
-          languageInfo={langBInfo}
-          otherLanguageInfo={langAInfo}
-          isActive={activeSpeaker === 'B'}
-          isConnected={isConnected}
-          isConnecting={isConnecting && activeSpeaker === 'B'}
-          translationState={translationState}
-          currentInput={activeSpeaker === 'B' ? currentInput : ''}
-          currentOutput={activeSpeaker === 'B' ? currentOutput : ''}
-          conversation={conversation}
-          speaker="B"
-          onStart={handleStartSpeakerB}
-          onStop={handleStop}
-          historyRef={historyRefB}
-          isMicMuted={isMicMuted}
-          onToggleMic={toggleMicMute}
+        <TranslationPanel
+          title={langBInfo.nativeName}
+          subtitle={`${langAInfo.nativeName}에서 번역됨`}
+          history={history}
+          historyRef={translatedHistoryRef}
+          displayField="translatedText"
+          currentText={outputTranscript}
+          isProcessing={translationState === 'speaking'}
+          processingLabel="재생 중..."
+          emptyMessage="번역된 내용이 여기에 표시됩니다"
         />
       </div>
 
@@ -178,39 +156,70 @@ export function DualTranslationInterface({
           />
         </div>
 
-        <div className="flex items-center gap-2">
-          {/* 설정 버튼 */}
-          <button
-            type="button"
-            onClick={() => setShowSettings(!showSettings)}
-            className="p-2 text-gray-400 hover:text-white rounded-lg hover:bg-gray-700 transition-colors"
-            aria-label="설정"
-          >
-            <svg
-              className="w-5 h-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
+        <div className="flex items-center gap-3">
+          {/* 마이크 상태 표시 */}
+          {isConnected && (
+            <button
+              type="button"
+              onClick={toggleMicMute}
+              className={`p-2 rounded-full transition-colors ${
+                isMicMuted ? 'bg-red-600 text-white' : 'bg-green-600 text-white'
+              }`}
+              aria-label={isMicMuted ? '마이크 켜기' : '마이크 끄기'}
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-              />
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-              />
-            </svg>
-          </button>
+              {isMicMuted ? (
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"
+                  />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2"
+                  />
+                </svg>
+              ) : (
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
+                  />
+                </svg>
+              )}
+            </button>
+          )}
+
+          {/* 재연결 버튼 (연결 실패 시) */}
+          {isFailed && (
+            <button
+              type="button"
+              onClick={handleReconnect}
+              className="px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+            >
+              재연결
+            </button>
+          )}
 
           {/* 대화 초기화 */}
           <button
             type="button"
-            onClick={handleClearConversation}
+            onClick={handleClearHistory}
             className="p-2 text-gray-400 hover:text-white rounded-lg hover:bg-gray-700 transition-colors"
             aria-label="대화 초기화"
           >
@@ -230,27 +239,6 @@ export function DualTranslationInterface({
           </button>
         </div>
       </div>
-
-      {/* 설정 패널 */}
-      {showSettings && (
-        <div className="px-4 py-3 bg-gray-800 border-b border-gray-700">
-          <div className="flex items-center gap-4">
-            <label className="text-sm text-gray-400">음성:</label>
-            <select
-              value={voice}
-              onChange={e => setVoice(e.target.value as VoiceType)}
-              disabled={isConnected}
-              className="px-3 py-1.5 text-sm bg-gray-700 text-white border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-            >
-              {AVAILABLE_VOICES.map(v => (
-                <option key={v.value} value={v.value}>
-                  {v.label}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-      )}
 
       {/* 에러 메시지 */}
       {error && (
@@ -280,299 +268,131 @@ export function DualTranslationInterface({
         </div>
       )}
 
-      {/* ========== 하단 영역 (화자 A용 - 정방향) ========== */}
+      {/* 연결 중 표시 */}
+      {isConnecting && (
+        <div className="px-4 py-2 bg-blue-900/50 border-b border-blue-700">
+          <div className="flex items-center gap-2">
+            <svg
+              className="w-4 h-4 animate-spin text-blue-400"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+              />
+            </svg>
+            <p className="text-sm text-blue-300">마이크 연결 중...</p>
+          </div>
+        </div>
+      )}
+
+      {/* ========== 하단 영역 (한국어 원문) ========== */}
       <div className="flex-1 flex flex-col">
-        <SpeakerPanel
-          language={languageA}
-          languageInfo={langAInfo}
-          otherLanguageInfo={langBInfo}
-          isActive={activeSpeaker === 'A'}
-          isConnected={isConnected}
-          isConnecting={isConnecting && activeSpeaker === 'A'}
-          translationState={translationState}
-          currentInput={activeSpeaker === 'A' ? currentInput : ''}
-          currentOutput={activeSpeaker === 'A' ? currentOutput : ''}
-          conversation={conversation}
-          speaker="A"
-          onStart={handleStartSpeakerA}
-          onStop={handleStop}
-          historyRef={historyRefA}
-          isMicMuted={isMicMuted}
-          onToggleMic={toggleMicMute}
+        <TranslationPanel
+          title={langAInfo.nativeName}
+          subtitle="원문 (말씀하세요)"
+          history={history}
+          historyRef={koreanHistoryRef}
+          displayField="koreanText"
+          currentText={inputTranscript}
+          isProcessing={translationState === 'listening'}
+          processingLabel="듣는 중..."
+          emptyMessage={
+            isConnected ? '말씀하시면 자동으로 번역됩니다' : '연결 대기 중...'
+          }
         />
       </div>
     </div>
   );
 }
 
-/** 화자 패널 Props */
-interface SpeakerPanelProps {
-  language: SupportedLanguage;
-  languageInfo: { code: string; name: string; nativeName: string };
-  otherLanguageInfo: { code: string; name: string; nativeName: string };
-  isActive: boolean;
-  isConnected: boolean;
-  isConnecting: boolean;
-  translationState: string;
-  currentInput: string;
-  currentOutput: string;
-  conversation: ConversationItem[];
-  speaker: 'A' | 'B';
-  onStart: () => void;
-  onStop: () => void;
+/** 번역 패널 Props */
+interface TranslationPanelProps {
+  title: string;
+  subtitle: string;
+  history: HistoryItem[];
   historyRef: React.RefObject<HTMLDivElement | null>;
-  isMicMuted: boolean;
-  onToggleMic: () => void;
+  displayField: 'koreanText' | 'translatedText';
+  currentText: string;
+  isProcessing: boolean;
+  processingLabel: string;
+  emptyMessage: string;
 }
 
 /**
- * 개별 화자 패널 컴포넌트
+ * 번역 패널 컴포넌트
  */
-function SpeakerPanel({
-  languageInfo,
-  otherLanguageInfo,
-  isActive,
-  isConnected,
-  isConnecting,
-  translationState,
-  currentInput,
-  currentOutput,
-  conversation,
-  speaker,
-  onStart,
-  onStop,
+function TranslationPanel({
+  title,
+  subtitle,
+  history,
   historyRef,
-  isMicMuted,
-  onToggleMic,
-}: SpeakerPanelProps) {
-  // 이 화자에게 보여줄 대화 (상대방이 말한 것의 번역 + 내가 말한 원문)
-  const relevantConversation = conversation.map(item => {
-    if (item.speaker === speaker) {
-      // 내가 말한 것: 원문 표시
-      return {
-        ...item,
-        displayText: item.inputText,
-        isMyMessage: true,
-      };
-    } else {
-      // 상대방이 말한 것: 번역문 표시
-      return {
-        ...item,
-        displayText: item.outputText,
-        isMyMessage: false,
-      };
-    }
-  });
-
+  displayField,
+  currentText,
+  isProcessing,
+  processingLabel,
+  emptyMessage,
+}: TranslationPanelProps) {
   return (
     <div className="flex-1 flex flex-col p-4 bg-gray-900">
-      {/* 언어 표시 헤더 */}
+      {/* 헤더 */}
       <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <span className="text-lg font-bold text-white">
-            {languageInfo.nativeName}
-          </span>
-          <span className="text-sm text-gray-400">
-            → {otherLanguageInfo.nativeName}
-          </span>
+        <div>
+          <span className="text-lg font-bold text-white">{title}</span>
+          <span className="ml-2 text-sm text-gray-400">{subtitle}</span>
         </div>
-        {isActive && (
+        {isProcessing && (
           <div className="flex items-center gap-1 text-green-400 text-sm">
             <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
-            활성
+            {processingLabel}
           </div>
         )}
       </div>
 
-      {/* 대화 히스토리 */}
+      {/* 히스토리 */}
       <div
         ref={historyRef}
-        className="flex-1 overflow-y-auto space-y-2 mb-4 min-h-0"
+        className="flex-1 overflow-y-auto space-y-3 min-h-0"
       >
-        {relevantConversation.length === 0 ? (
+        {history.length === 0 && !currentText ? (
           <div className="flex items-center justify-center h-full text-gray-500 text-sm">
-            대화를 시작하세요
+            {emptyMessage}
           </div>
         ) : (
-          relevantConversation.map(item => (
-            <div
-              key={item.id}
-              className={`flex ${item.isMyMessage ? 'justify-end' : 'justify-start'}`}
-            >
-              <div
-                className={`max-w-[80%] px-4 py-2 rounded-2xl text-sm ${
-                  item.isMyMessage
-                    ? 'bg-blue-600 text-white rounded-br-md'
-                    : 'bg-gray-700 text-gray-100 rounded-bl-md'
-                }`}
-              >
-                {item.displayText}
-              </div>
-            </div>
-          ))
-        )}
-
-        {/* 현재 진행 중인 번역 표시 */}
-        {isActive && (currentInput || currentOutput) && (
-          <div className="space-y-2 border-t border-gray-700 pt-2 mt-2">
-            {currentInput && (
-              <div className="flex justify-end">
-                <div className="max-w-[80%] px-4 py-2 rounded-2xl text-sm bg-blue-600/50 text-white rounded-br-md border border-blue-500 border-dashed">
-                  {currentInput}
-                  {translationState === 'listening' && (
-                    <span className="ml-2 inline-flex">
-                      <span className="animate-pulse">●</span>
-                    </span>
-                  )}
-                </div>
-              </div>
-            )}
-            {currentOutput && (
-              <div className="flex justify-start">
-                <div className="max-w-[80%] px-4 py-2 rounded-2xl text-sm bg-green-700/50 text-green-100 rounded-bl-md border border-green-500 border-dashed">
-                  {currentOutput}
-                  {translationState === 'speaking' && (
-                    <span className="ml-2 inline-flex">
-                      <span className="animate-pulse">🔊</span>
-                    </span>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* 컨트롤 버튼 */}
-      <div className="flex items-center justify-center gap-4">
-        {isActive && isConnected ? (
           <>
-            {/* 마이크 토글 */}
-            <button
-              type="button"
-              onClick={onToggleMic}
-              className={`p-3 rounded-full transition-colors ${
-                isMicMuted
-                  ? 'bg-red-600 text-white'
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-              }`}
-              aria-label={isMicMuted ? '마이크 켜기' : '마이크 끄기'}
-            >
-              {isMicMuted ? (
-                <svg
-                  className="w-6 h-6"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"
-                  />
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2"
-                  />
-                </svg>
-              ) : (
-                <svg
-                  className="w-6 h-6"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
-                  />
-                </svg>
-              )}
-            </button>
+            {/* 저장된 히스토리 */}
+            {history.map(item => (
+              <div key={item.id} className="px-4 py-3 bg-gray-800 rounded-xl">
+                <p className="text-white text-base leading-relaxed">
+                  {item[displayField]}
+                </p>
+                <p className="text-gray-500 text-xs mt-1">
+                  {new Date(item.timestamp).toLocaleTimeString('ko-KR', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
+                </p>
+              </div>
+            ))}
 
-            {/* 중지 버튼 */}
-            <button
-              type="button"
-              onClick={onStop}
-              className="p-4 bg-red-600 hover:bg-red-700 text-white rounded-full transition-colors shadow-lg"
-              aria-label="통역 중지"
-            >
-              <svg
-                className="w-8 h-8"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"
-                />
-              </svg>
-            </button>
-          </>
-        ) : (
-          /* 시작 버튼 */
-          <button
-            type="button"
-            onClick={onStart}
-            disabled={isConnecting}
-            className="p-4 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-full transition-colors shadow-lg disabled:cursor-not-allowed"
-            aria-label="통역 시작"
-          >
-            {isConnecting ? (
-              <svg
-                className="w-8 h-8 animate-spin"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                />
-              </svg>
-            ) : (
-              <svg
-                className="w-8 h-8"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
-                />
-              </svg>
+            {/* 현재 진행 중인 텍스트 */}
+            {currentText && (
+              <div className="px-4 py-3 bg-blue-900/30 border border-blue-700 rounded-xl">
+                <p className="text-blue-100 text-base leading-relaxed">
+                  {currentText}
+                  <span className="ml-1 inline-flex">
+                    <span className="animate-pulse text-blue-400">●</span>
+                  </span>
+                </p>
+              </div>
             )}
-          </button>
+          </>
         )}
       </div>
-
-      {/* 안내 텍스트 */}
-      <p className="text-center text-gray-500 text-xs mt-2">
-        {isActive && isConnected
-          ? '말씀하세요...'
-          : isConnecting
-            ? '연결 중...'
-            : '버튼을 눌러 통역을 시작하세요'}
-      </p>
     </div>
   );
 }
