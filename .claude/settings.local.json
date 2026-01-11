@@ -12,7 +12,10 @@
       "Bash(.ts)",
       "Bash(^d \")",
       "Bash(ls -la \"C:\\\\Users\\\\Ace\\\\Desktop\\\\development\\\\00. project\\\\2026\\\\realtime-translator\\\\services\"\" | grep -E \".tsx)",
-      "Bash(npm run build:*)"
+      "Bash(npm run build:*)",
+      "Bash(cd:*)",
+      "WebFetch(domain:platform.openai.com)",
+      "Bash(npm run lint:*)"
     ]
   }
 }

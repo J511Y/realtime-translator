@@ -1,8 +1,4 @@
-import type {
-  ImageTranslateResult,
-  TextBlock,
-  TextPosition,
-} from '@/types/image';
+import type { ImageTranslateResult, TextBlock } from '@/types/image';
 import type { SupportedLanguage } from '@/types/realtime';
 
 /** Vision API 요청 메시지 */
@@ -40,6 +36,68 @@ interface VisionResponse {
   };
 }
 
+/** Structured Output을 위한 JSON Schema 정의 */
+const IMAGE_TRANSLATION_SCHEMA = {
+  name: 'image_translation_result',
+  strict: true,
+  schema: {
+    type: 'object',
+    properties: {
+      detectedLanguage: {
+        type: ['string', 'null'],
+        enum: ['ko', 'pt', 'en', 'es', 'fr', 'ja', 'zh', null],
+        description: '감지된 원본 언어 코드',
+      },
+      textBlocks: {
+        type: 'array',
+        description: '이미지에서 추출된 텍스트 블록 목록',
+        items: {
+          type: 'object',
+          properties: {
+            original: {
+              type: 'string',
+              description: '원본 텍스트',
+            },
+            translated: {
+              type: 'string',
+              description: '번역된 텍스트',
+            },
+            type: {
+              type: 'string',
+              description:
+                '텍스트 유형 (menu, sign, notice, label, title, body 등)',
+            },
+            position: {
+              type: 'object',
+              description: '이미지 내 텍스트 위치 (퍼센트 좌표)',
+              properties: {
+                x: { type: 'number', description: '좌측 상단 X 좌표 (0-100%)' },
+                y: { type: 'number', description: '좌측 상단 Y 좌표 (0-100%)' },
+                width: { type: 'number', description: '너비 (0-100%)' },
+                height: { type: 'number', description: '높이 (0-100%)' },
+              },
+              required: ['x', 'y', 'width', 'height'],
+              additionalProperties: false,
+            },
+          },
+          required: ['original', 'translated', 'type', 'position'],
+          additionalProperties: false,
+        },
+      },
+      summary: {
+        type: 'string',
+        description: '이미지에 대한 전체적인 설명과 번역 요약',
+      },
+      culturalNote: {
+        type: ['string', 'null'],
+        description: '문화적 맥락이나 추가 설명 (없으면 null)',
+      },
+    },
+    required: ['detectedLanguage', 'textBlocks', 'summary', 'culturalNote'],
+    additionalProperties: false,
+  },
+} as const;
+
 /** 언어 코드 → 언어명 매핑 */
 const LANGUAGE_NAMES: Record<SupportedLanguage, string> = {
   ko: '한국어',
@@ -53,12 +111,14 @@ const LANGUAGE_NAMES: Record<SupportedLanguage, string> = {
 
 /**
  * OpenAI Vision API 클라이언트
- * - GPT-4o를 사용하여 이미지 내 텍스트 추출 및 번역
+ * - GPT-4.1을 사용하여 이미지 내 텍스트 추출 및 번역
+ * - Structured Output으로 안정적인 JSON 응답 보장
  */
 export class OpenAIVisionClient {
   private readonly apiKey: string;
   private readonly baseUrl = 'https://api.openai.com/v1';
-  private readonly model = 'gpt-4o';
+  /** GPT-4.1: GPT-4o 대비 개선된 비전 성능 및 structured output 지원 */
+  private readonly model = 'gpt-4.1';
 
   constructor(apiKey: string) {
     this.apiKey = apiKey;
@@ -123,6 +183,11 @@ export class OpenAIVisionClient {
           messages,
           max_tokens: 4096,
           temperature: 0.3,
+          // Structured Output: 스키마에 맞는 정확한 JSON 응답 보장
+          response_format: {
+            type: 'json_schema',
+            json_schema: IMAGE_TRANSLATION_SCHEMA,
+          },
         }),
       });
 
@@ -152,6 +217,7 @@ export class OpenAIVisionClient {
 
   /**
    * 시스템 프롬프트 생성
+   * - Structured Output 사용으로 JSON 형식 설명 간소화
    */
   private buildSystemPrompt(
     targetLangName: string,
@@ -167,71 +233,51 @@ ${sourceHint}
 다음 작업을 수행해주세요:
 1. 이미지에서 모든 텍스트를 찾아 추출합니다 (간판, 메뉴, 안내문, 라벨 등)
 2. 각 텍스트를 ${targetLangName}로 번역합니다
-3. 각 텍스트의 이미지 내 위치를 퍼센트 좌표로 추정합니다
-4. 텍스트의 맥락과 의미를 설명합니다
-
-반드시 다음 JSON 형식으로 응답해주세요:
-{
-  "detectedLanguage": "감지된 언어 코드 (ko, pt, en, es, fr, ja, zh 중 하나, 없으면 null)",
-  "textBlocks": [
-    {
-      "original": "원본 텍스트",
-      "translated": "번역된 텍스트",
-      "type": "텍스트 유형 (menu, sign, notice, label, title, body 등)",
-      "position": {
-        "x": 10,
-        "y": 20,
-        "width": 30,
-        "height": 5
-      }
-    }
-  ],
-  "summary": "이미지에 대한 전체적인 설명과 번역 요약 (${targetLangName}로)",
-  "culturalNote": "문화적 맥락이나 추가 설명이 필요한 경우 (선택사항, ${targetLangName}로)"
-}
-
-position 필드 설명:
-- x: 텍스트 좌측 상단의 X 좌표 (이미지 너비 기준 0-100%)
-- y: 텍스트 좌측 상단의 Y 좌표 (이미지 높이 기준 0-100%)
-- width: 텍스트 영역 너비 (이미지 너비 기준 0-100%)
-- height: 텍스트 영역 높이 (이미지 높이 기준 0-100%)
+3. 각 텍스트의 이미지 내 위치를 퍼센트 좌표(0-100)로 추정합니다
+4. 전체 이미지에 대한 요약을 ${targetLangName}로 작성합니다
 
 주의사항:
 - 텍스트가 없는 이미지의 경우 textBlocks를 빈 배열로 반환
 - 가격, 숫자 등은 그대로 유지
-- 브랜드명은 원본 그대로 유지하되 발음/의미 설명 추가
+- 브랜드명은 원본 그대로 유지하되 번역 시 발음/의미 설명 추가
 - 메뉴판의 경우 각 메뉴 항목을 개별 블록으로 분리
-- position은 텍스트가 이미지에서 대략 어디에 있는지 추정하여 제공`;
+- position의 x, y, width, height는 모두 0-100 범위의 퍼센트 값
+- type은 menu, sign, notice, label, title, body 등으로 분류
+- culturalNote는 문화적 맥락 설명이 필요할 때만 제공, 불필요시 null`;
   }
+
+  /** Structured Output 응답 타입 */
+  private readonly ParsedResponse = {} as {
+    detectedLanguage: SupportedLanguage | null;
+    textBlocks: Array<{
+      original: string;
+      translated: string;
+      type: string;
+      position: {
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+      };
+    }>;
+    summary: string;
+    culturalNote: string | null;
+  };
 
   /**
    * API 응답 파싱
+   * - Structured Output 사용으로 JSON 형식이 보장됨
    */
   private parseResponse(content: string): ImageTranslateResult {
-    // JSON 블록 추출 (마크다운 코드 블록 처리)
-    let jsonStr = content;
-    const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
-    if (jsonMatch) {
-      jsonStr = jsonMatch[1].trim();
-    }
-
     try {
-      const parsed = JSON.parse(jsonStr) as {
-        detectedLanguage?: string | null;
-        textBlocks?: Array<{
-          original?: string;
-          translated?: string;
-          type?: string;
-          position?: {
-            x?: number;
-            y?: number;
-            width?: number;
-            height?: number;
-          };
-        }>;
-        summary?: string;
-        culturalNote?: string;
-      };
+      // Structured Output은 순수 JSON을 반환하지만, 안전을 위해 코드 블록 처리
+      let jsonStr = content;
+      const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
+      if (jsonMatch) {
+        jsonStr = jsonMatch[1].trim();
+      }
+
+      const parsed = JSON.parse(jsonStr) as typeof this.ParsedResponse;
 
       // 언어 코드 검증
       const validLanguages: SupportedLanguage[] = [
@@ -243,55 +289,39 @@ position 필드 설명:
         'ja',
         'zh',
       ];
-      const detectedLang = parsed.detectedLanguage as SupportedLanguage | null;
       const validDetectedLanguage =
-        detectedLang && validLanguages.includes(detectedLang)
-          ? detectedLang
+        parsed.detectedLanguage &&
+        validLanguages.includes(parsed.detectedLanguage)
+          ? parsed.detectedLanguage
           : null;
 
-      // TextBlock 배열 검증 및 변환
-      const textBlocks: TextBlock[] = (parsed.textBlocks || []).map(block => {
-        // position 유효성 검사
-        let position: TextPosition | undefined;
-        if (
-          block.position &&
-          typeof block.position.x === 'number' &&
-          typeof block.position.y === 'number' &&
-          typeof block.position.width === 'number' &&
-          typeof block.position.height === 'number'
-        ) {
-          position = {
-            x: Math.max(0, Math.min(100, block.position.x)),
-            y: Math.max(0, Math.min(100, block.position.y)),
-            width: Math.max(0, Math.min(100, block.position.width)),
-            height: Math.max(0, Math.min(100, block.position.height)),
-          };
-        }
-
-        return {
-          original: block.original || '',
-          translated: block.translated || '',
-          type: block.type,
-          position,
-        };
-      });
+      // TextBlock 배열 변환 (position 좌표 범위 보정)
+      const textBlocks: TextBlock[] = parsed.textBlocks.map(block => ({
+        original: block.original,
+        translated: block.translated,
+        type: block.type,
+        position: {
+          x: Math.max(0, Math.min(100, block.position.x)),
+          y: Math.max(0, Math.min(100, block.position.y)),
+          width: Math.max(0, Math.min(100, block.position.width)),
+          height: Math.max(0, Math.min(100, block.position.height)),
+        },
+      }));
 
       return {
         detectedLanguage: validDetectedLanguage,
         textBlocks,
-        summary: parsed.summary || '이미지 분석 결과를 가져올 수 없습니다.',
-        culturalNote: parsed.culturalNote,
+        summary: parsed.summary,
+        culturalNote: parsed.culturalNote ?? undefined,
       };
     } catch (parseError) {
-      console.error('[Vision] JSON 파싱 실패:', parseError, content);
+      // Structured Output 사용 시 파싱 실패는 거의 발생하지 않음
+      console.error('[Vision] JSON 파싱 실패 (예상치 못한 오류):', parseError);
+      console.error('[Vision] 원본 응답:', content);
 
-      // 파싱 실패 시 원본 텍스트를 summary로 반환
-      return {
-        detectedLanguage: null,
-        textBlocks: [],
-        summary: content,
-        culturalNote: undefined,
-      };
+      throw new Error(
+        '이미지 분석 결과를 처리할 수 없습니다. 다시 시도해주세요.'
+      );
     }
   }
 
