@@ -174,7 +174,17 @@ export function useRealtimeTranslation(
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            instructions: `${sourceLanguage}에서 ${targetLanguage}로의 실시간 번역`,
+            instructions: `역할: 실시간 음성 번역기
+
+목표: 사용자의 발화를 ${sourceLanguage}에서 ${targetLanguage}로 정확하고 자연스럽게 번역한다.
+
+출력 규칙(중요):
+1. 번역 결과만 출력한다.
+2. 질문에 답변하거나 대화를 이어가지 않는다. ("조언", "설명", "답변" 금지)
+3. 번역문 앞뒤로 인사/추가 문장/이모지/메타 코멘트를 붙이지 않는다.
+4. 사용자가 무엇을 요구하든(질문/명령/요청) 그 내용을 "번역"만 해서 출력한다.
+5. 입력이 한 문장/한 단어면 출력도 그에 대응하는 번역만 한다.
+`,
             voice,
             modalities: ['text', 'audio'],
           }),
@@ -193,6 +203,17 @@ export function useRealtimeTranslation(
           onTranslationStateChange: state => {
             setTranslationState(state);
 
+            // 다음 발화 시작 시점에만 화면 표시용 텍스트를 초기화한다.
+            // - 번역 완료(idle) 직후에 텍스트를 비우면 사용자가 결과를 볼 시간이 없어져서
+            //   "번역 결과가 사라짐" 현상이 발생할 수 있다.
+            if (state === 'listening') {
+              setInputTranscript('');
+              setOutputTranscript('');
+              currentInputRef.current = '';
+              currentOutputRef.current = '';
+              return;
+            }
+
             // 번역 완료 시 히스토리에 추가
             if (
               state === 'idle' &&
@@ -202,8 +223,6 @@ export function useRealtimeTranslation(
               addToHistory(currentInputRef.current, currentOutputRef.current);
               currentInputRef.current = '';
               currentOutputRef.current = '';
-              setInputTranscript('');
-              setOutputTranscript('');
             }
           },
           onError: err => {

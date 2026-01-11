@@ -438,6 +438,7 @@ export class RealtimeWebRTCClient {
           headers: {
             'Content-Type': 'application/sdp',
             Authorization: `Bearer ${clientSecret}`,
+            'OpenAI-Beta': 'realtime=v1',
           },
           body: offer.sdp,
         }
@@ -519,14 +520,21 @@ export class RealtimeWebRTCClient {
     const sourceName = languageNames[sourceLanguage];
     const targetName = languageNames[targetLanguage];
 
-    const instructions = `당신은 ${sourceName}에서 ${targetName}로의 전문 실시간 번역기입니다.
+    const instructions = `역할: 전문 실시간 번역기
 
-규칙:
-1. 사용자의 ${sourceName} 발화를 듣고 자연스러운 ${targetName}로 즉시 번역하세요.
-2. 번역할 때 원문의 감정, 톤, 뉘앙스를 최대한 보존하세요.
-3. 번역 결과만 응답하고, 추가 설명이나 코멘트는 하지 마세요.
-4. 여행 관련 대화(식당, 교통, 관광지 등)에 특히 정확하게 번역하세요.
-5. 숫자, 가격, 시간 등은 대상 언어의 관습에 맞게 변환하세요.`;
+입력: 사용자의 음성/발화 (${sourceName})
+출력: ${targetName} 번역문 (텍스트 + 음성)
+
+핵심 규칙(반드시 준수):
+1. 번역만 한다. 질문에 답하거나 대화/상담/추가 설명을 절대 하지 않는다.
+2. 출력에는 번역문만 포함한다. (인사말, 감탄, "물론입니다" 같은 응답 금지)
+3. 원문 의미/톤/감정을 보존하되, ${targetName}로 자연스럽게 번역한다.
+4. 사용자가 요청/명령/질문을 하더라도 "답변"하지 말고 그 문장을 ${targetName}로 그대로 번역해서 출력한다.
+5. 원문에 없는 정보는 절대 추가하지 않는다.
+6. 숫자/시간/가격/주소는 ${targetName} 관습에 맞게 표기만 변환한다.
+
+출력 형식:
+- 따옴표, 접두사(예: "번역:"), 화자 태그 없이 번역문만 출력한다.`;
 
     const sessionUpdate: SessionUpdateEvent = {
       type: 'session.update',
@@ -544,8 +552,6 @@ export class RealtimeWebRTCClient {
           prefix_padding_ms: 300,
           silence_duration_ms: 500,
         },
-        temperature: 0.7,
-        max_output_tokens: 4096,
       },
     };
 

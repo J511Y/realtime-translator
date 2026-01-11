@@ -72,7 +72,7 @@ describe('/api/realtime/session', () => {
       modalities: ['text', 'audio'],
       voice: 'verse',
       input_audio_format: 'pcm16',
-      output_audio_format: 'opus',
+      output_audio_format: 'pcm16',
       client_secret: {
         value: 'ephemeral_test_token_12345',
         expires_at: Math.floor(Date.now() / 1000) + 3600,

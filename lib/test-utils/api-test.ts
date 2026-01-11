@@ -107,7 +107,7 @@ export class SessionAPITester {
       voice: 'verse',
       modalities: ['text', 'audio'],
       input_audio_format: 'pcm16',
-      output_audio_format: 'opus',
+      output_audio_format: 'pcm16',
     };
 
     const result = await this.testCreateSession(request);

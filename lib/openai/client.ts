@@ -12,7 +12,7 @@ import type {
 export class OpenAIRealtimeClient {
   private readonly apiKey: string;
   private readonly baseUrl = 'https://api.openai.com/v1';
-  private readonly model = 'gpt-4o-realtime-preview';
+  private readonly model = 'gpt-4o-realtime-preview-2024-12-17';
 
   constructor(apiKey: string) {
     this.apiKey = apiKey;
@@ -34,7 +34,7 @@ export class OpenAIRealtimeClient {
       instructions: request.instructions,
       modalities: request.modalities || ['text', 'audio'],
       input_audio_format: request.input_audio_format || 'pcm16',
-      output_audio_format: request.output_audio_format || 'opus',
+      output_audio_format: request.output_audio_format || 'pcm16',
       turn_detection: request.turn_detection || {
         type: 'server_vad',
         threshold: 0.5,
@@ -44,8 +44,6 @@ export class OpenAIRealtimeClient {
       input_audio_transcription: request.input_audio_transcription || {
         model: 'whisper-1',
       },
-      temperature: request.temperature || 0.8,
-      max_output_tokens: request.max_output_tokens || 4096,
     };
 
     console.log('[OpenAI] 세션 생성 요청:', {

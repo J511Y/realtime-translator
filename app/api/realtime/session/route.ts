@@ -77,7 +77,7 @@ const VALID_VOICES = [
 
 const VALID_MODALITIES = ['text', 'audio'] as const;
 
-const VALID_AUDIO_FORMATS = ['pcm16', 'opus', 'mp3', 'wav'] as const;
+const VALID_AUDIO_FORMATS = ['pcm16', 'g711_ulaw', 'g711_alaw'] as const;
 
 function isVoiceType(value: string): value is VoiceType {
   return (VALID_VOICES as readonly string[]).includes(value);

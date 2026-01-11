@@ -13,7 +13,7 @@ export type VoiceType =
   | 'shimmer';
 
 /** 오디오 포맷 종류 */
-export type AudioFormat = 'pcm16' | 'opus' | 'mp3' | 'wav';
+export type AudioFormat = 'pcm16' | 'g711_ulaw' | 'g711_alaw';
 
 /** 모달리티 종류 */
 export type Modality = 'text' | 'audio';
@@ -164,8 +164,8 @@ export interface OpenAISessionPayload {
   output_audio_format: AudioFormat;
   turn_detection: TurnDetection;
   input_audio_transcription: InputAudioTranscription;
-  temperature: number;
-  max_output_tokens: number;
+  temperature?: number;
+  max_output_tokens?: number;
   tools?: Tool[];
   tool_choice?: string;
 }
