@@ -224,10 +224,17 @@ export function useRealtimeTranslation(
           onTranslationStateChange: state => {
             setTranslationState(state);
 
-            // 다음 발화 시작 시점에만 화면 표시용 텍스트를 초기화한다.
-            // - 번역 완료(idle) 직후에 텍스트를 비우면 사용자가 결과를 볼 시간이 없어져서
-            //   "번역 결과가 사라짐" 현상이 발생할 수 있다.
+            // 새 발화 시작 시 이전 텍스트가 있으면 히스토리에 추가 후 초기화
             if (state === 'listening') {
+              // 이전 번역이 완료되지 않은 상태에서 새 발화가 시작된 경우
+              // 현재까지의 텍스트를 히스토리에 저장
+              if (currentInputRef.current && currentOutputRef.current) {
+                addToHistoryRef.current(
+                  currentInputRef.current,
+                  currentOutputRef.current
+                );
+              }
+              // 화면 표시용 텍스트 초기화
               setInputTranscript('');
               setOutputTranscript('');
               currentInputRef.current = '';
@@ -235,7 +242,7 @@ export function useRealtimeTranslation(
               return;
             }
 
-            // 번역 완료 시 히스토리에 추가
+            // 번역 완료(idle) 시에도 히스토리에 추가
             if (
               state === 'idle' &&
               currentInputRef.current &&

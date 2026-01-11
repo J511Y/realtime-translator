@@ -10,6 +10,7 @@
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { useRealtimeTranslation } from '@/lib/hooks/useRealtimeTranslation';
 import type { SupportedLanguage, VoiceType } from '@/types/realtime';
 import { ConnectionStatus } from './ConnectionStatus';
@@ -43,6 +44,7 @@ export function DualTranslationInterface({
   defaultVoice = 'verse',
   className = '',
 }: DualTranslationInterfaceProps) {
+  const router = useRouter();
   const [voice] = useState<VoiceType>(defaultVoice);
 
   // 히스토리 (컴포넌트 레벨에서 관리 - Hook과 분리)
@@ -150,6 +152,30 @@ export function DualTranslationInterface({
       {/* ========== 중앙 컨트롤 바 ========== */}
       <div className="flex items-center justify-between px-4 py-2 bg-gray-800 border-y border-gray-700">
         <div className="flex items-center gap-2">
+          {/* 뒤로가기 버튼 */}
+          <button
+            type="button"
+            onClick={() => {
+              disconnect();
+              router.push('/voice');
+            }}
+            className="p-2 text-gray-400 hover:text-white rounded-lg hover:bg-gray-700 transition-colors"
+            aria-label="뒤로가기"
+          >
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M10 19l-7-7m0 0l7-7m-7 7h18"
+              />
+            </svg>
+          </button>
           <ConnectionStatus
             connectionState={connectionState}
             translationState={translationState}
