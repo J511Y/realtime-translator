@@ -1,3 +1,6 @@
+// 이미지 번역 타입 re-export
+export * from './image';
+
 // 번역 관련 타입 정의
 export interface TranslationRequest {
   text: string;
