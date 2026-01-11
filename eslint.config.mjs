@@ -34,12 +34,16 @@ const eslintConfig = defineConfig([
           rules: [
             {
               from: ['app', 'components'],
-              allow: ['components', 'types', 'services'],
+              allow: ['components', 'types', 'services', 'hooks'],
               disallow: ['lib'],
             },
             {
               from: ['services'],
               allow: ['lib', 'types', 'repositories'],
+            },
+            {
+              from: ['hooks'],
+              allow: ['lib', 'types', 'services'],
             },
             {
               from: ['lib'],
@@ -63,6 +67,7 @@ const eslintConfig = defineConfig([
         { type: 'app', pattern: '**/app/**' },
         { type: 'components', pattern: '**/components/**' },
         { type: 'services', pattern: '**/services/**' },
+        { type: 'hooks', pattern: '**/lib/hooks/**' },
         { type: 'lib', pattern: '**/lib/**' },
         { type: 'types', pattern: '**/types/**' },
         { type: 'repositories', pattern: '**/repositories/**' },
