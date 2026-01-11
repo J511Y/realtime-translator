@@ -105,6 +105,9 @@ export function DualTranslationInterface({
     }
   }, [history, inputTranscript, outputTranscript]);
 
+  const sharedCurrentInput = activeSpeaker ? inputTranscript : '';
+  const sharedCurrentOutput = activeSpeaker ? outputTranscript : '';
+
   // 언마운트 시 연결 해제
   useEffect(() => {
     return () => {
@@ -180,8 +183,8 @@ export function DualTranslationInterface({
           isConnecting={isConnecting && activeSpeaker === 'B'}
           translationState={translationState}
           history={history}
-          currentInput={activeSpeaker === 'B' ? inputTranscript : ''}
-          currentOutput={activeSpeaker === 'B' ? outputTranscript : ''}
+          currentInput={sharedCurrentInput}
+          currentOutput={sharedCurrentOutput}
           historyRef={panelBRef}
           onStart={handleStartSpeakerB}
           onStop={handleStop}
@@ -291,8 +294,8 @@ export function DualTranslationInterface({
           isConnecting={isConnecting && activeSpeaker === 'A'}
           translationState={translationState}
           history={history}
-          currentInput={activeSpeaker === 'A' ? inputTranscript : ''}
-          currentOutput={activeSpeaker === 'A' ? outputTranscript : ''}
+          currentInput={sharedCurrentInput}
+          currentOutput={sharedCurrentOutput}
           historyRef={panelARef}
           onStart={handleStartSpeakerA}
           onStop={handleStop}
@@ -412,7 +415,7 @@ function SpeakerPanel({
                 </div>
               </div>
             )}
-            {isActive && currentOutput && (
+            {currentOutput && (
               <div className="flex justify-start">
                 <div className="max-w-[85%] px-3 py-2 rounded-2xl text-sm bg-green-700/50 text-green-100 rounded-bl-sm border border-green-500 border-dashed">
                   {currentOutput}

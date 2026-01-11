@@ -119,6 +119,7 @@ export function useRealtimeTranslation(
   const [isSpeakerMuted, setIsSpeakerMuted] = useState(false);
 
   // Refs
+  const optionsRef = useRef(options);
   const clientRef = useRef<RealtimeWebRTCClient | null>(null);
   const connectionStateRef = useRef<ConnectionState>('disconnected');
   const currentInputRef = useRef('');
@@ -127,7 +128,6 @@ export function useRealtimeTranslation(
     source: SupportedLanguage;
     target: SupportedLanguage;
   } | null>(null);
-  const optionsRef = useRef(options);
 
   // options ref 업데이트
   useEffect(() => {
@@ -156,10 +156,6 @@ export function useRealtimeTranslation(
     setHistory(prev => [...prev, item].slice(-100)); // 최대 100개 유지
     optionsRef.current.onTranslationComplete?.(item);
   });
-
-  const addToHistory = useCallback((input: string, output: string) => {
-    addToHistoryRef.current(input, output);
-  }, []);
 
   /**
    * 연결 시작
@@ -258,7 +254,7 @@ export function useRealtimeTranslation(
           },
           onError: err => {
             setError(err);
-            options.onError?.(err);
+            optionsRef.current.onError?.(err);
           },
           onInputTranscript: (transcript, isFinal) => {
             if (isFinal) {
@@ -272,7 +268,9 @@ export function useRealtimeTranslation(
             }
             setOutputTranscript(transcript);
           },
-          ...(options.onMessage ? { onMessage: options.onMessage } : {}),
+          ...(optionsRef.current.onMessage
+            ? { onMessage: optionsRef.current.onMessage }
+            : {}),
         });
 
         await clientRef.current.connect(client_secret);
@@ -291,10 +289,10 @@ export function useRealtimeTranslation(
         };
         setError(realtimeError);
         setConnectionState('failed');
-        options.onError?.(realtimeError);
+        optionsRef.current.onError?.(realtimeError);
       }
     },
-    [options, addToHistory]
+    []
   );
 
   /**

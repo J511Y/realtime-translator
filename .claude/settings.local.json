@@ -5,7 +5,14 @@
       "Bash(git commit:*)",
       "Bash(npm run type-check:*)",
       "Bash(npm run lint:check:*)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(ls -la \"C:\\\\Users\\\\Ace\\\\Desktop\\\\development\\\\00. project\\\\2026\\\\realtime-translator\\\\app\"\" | grep -E \".tsx)",
+      "Bash(.ts \")",
+      "Bash(ls -la \"C:\\\\Users\\\\Ace\\\\Desktop\\\\development\\\\00. project\\\\2026\\\\realtime-translator\\\\components\"\" | grep -E \".tsx)",
+      "Bash(.ts)",
+      "Bash(^d \")",
+      "Bash(ls -la \"C:\\\\Users\\\\Ace\\\\Desktop\\\\development\\\\00. project\\\\2026\\\\realtime-translator\\\\services\"\" | grep -E \".tsx)",
+      "Bash(npm run build:*)"
     ]
   }
 }
