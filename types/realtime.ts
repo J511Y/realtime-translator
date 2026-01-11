@@ -255,3 +255,377 @@ export interface SessionStats {
   /** 평균 세션 지속 시간 (초) */
   avg_session_duration: number;
 }
+
+// ============================================================================
+// WebRTC 클라이언트 관련 타입
+// ============================================================================
+
+/** WebRTC 연결 상태 */
+export type ConnectionState =
+  | 'disconnected'
+  | 'connecting'
+  | 'connected'
+  | 'reconnecting'
+  | 'failed';
+
+/** 번역 세션 상태 */
+export type TranslationState =
+  | 'idle'
+  | 'listening'
+  | 'processing'
+  | 'speaking'
+  | 'error';
+
+/** Realtime 클라이언트 옵션 */
+export interface RealtimeClientOptions {
+  /** 세션 이벤트 수신 콜백 */
+  onMessage?: (event: RealtimeServerEvent) => void;
+  /** 오디오 재생 시작 콜백 */
+  onAudioStart?: () => void;
+  /** 오디오 재생 종료 콜백 */
+  onAudioEnd?: () => void;
+  /** 연결 상태 변경 콜백 */
+  onConnectionStateChange?: (state: ConnectionState) => void;
+  /** 번역 상태 변경 콜백 */
+  onTranslationStateChange?: (state: TranslationState) => void;
+  /** 에러 발생 콜백 */
+  onError?: (error: RealtimeError) => void;
+  /** 입력 음성 전사 콜백 */
+  onInputTranscript?: (transcript: string, isFinal: boolean) => void;
+  /** 출력 번역 텍스트 콜백 */
+  onOutputTranscript?: (transcript: string, isFinal: boolean) => void;
+}
+
+/** Realtime 에러 */
+export interface RealtimeError {
+  type: 'connection' | 'audio' | 'api' | 'unknown';
+  code?: string | undefined;
+  message: string;
+  recoverable: boolean;
+}
+
+/** 마이크 설정 옵션 */
+export interface MicrophoneOptions {
+  /** 샘플레이트 (기본값: 16000) */
+  sampleRate?: number;
+  /** 채널 수 (기본값: 1) */
+  channelCount?: number;
+  /** 에코 캔슬레이션 (기본값: true) */
+  echoCancellation?: boolean;
+  /** 노이즈 억제 (기본값: true) */
+  noiseSuppression?: boolean;
+  /** 자동 게인 컨트롤 (기본값: true) */
+  autoGainControl?: boolean;
+}
+
+// ============================================================================
+// Realtime API 서버 이벤트 타입 (서버 → 클라이언트)
+// ============================================================================
+
+/** 서버 이벤트 기본 타입 */
+export interface RealtimeServerEventBase {
+  event_id?: string;
+}
+
+/** 세션 생성 이벤트 */
+export interface SessionCreatedEvent extends RealtimeServerEventBase {
+  type: 'session.created';
+  session: {
+    id: string;
+    model: string;
+    expires_at: number;
+    modalities: Modality[];
+    voice: VoiceType;
+    instructions: string;
+    input_audio_format: AudioFormat;
+    output_audio_format: AudioFormat;
+  };
+}
+
+/** 세션 업데이트 완료 이벤트 */
+export interface SessionUpdatedEvent extends RealtimeServerEventBase {
+  type: 'session.updated';
+  session: {
+    id: string;
+    model: string;
+    modalities: Modality[];
+    voice: VoiceType;
+    instructions: string;
+  };
+}
+
+/** 음성 감지 시작 이벤트 */
+export interface SpeechStartedEvent extends RealtimeServerEventBase {
+  type: 'input_audio_buffer.speech_started';
+  audio_start_ms: number;
+  item_id: string;
+}
+
+/** 음성 감지 종료 이벤트 */
+export interface SpeechStoppedEvent extends RealtimeServerEventBase {
+  type: 'input_audio_buffer.speech_stopped';
+  audio_end_ms: number;
+  item_id: string;
+}
+
+/** 입력 오디오 전사 완료 이벤트 */
+export interface InputAudioTranscriptionCompletedEvent extends RealtimeServerEventBase {
+  type: 'conversation.item.input_audio_transcription.completed';
+  item_id: string;
+  content_index: number;
+  transcript: string;
+}
+
+/** 응답 생성 시작 이벤트 */
+export interface ResponseCreatedEvent extends RealtimeServerEventBase {
+  type: 'response.created';
+  response: {
+    id: string;
+    status: 'in_progress' | 'completed' | 'cancelled' | 'failed';
+    output: ResponseOutputItem[];
+  };
+}
+
+/** 응답 출력 아이템 */
+export interface ResponseOutputItem {
+  id: string;
+  type: 'message' | 'function_call';
+  role?: 'assistant';
+  content?: ResponseContent[];
+}
+
+/** 응답 콘텐츠 */
+export interface ResponseContent {
+  type: 'text' | 'audio';
+  text?: string;
+  audio?: string;
+  transcript?: string;
+}
+
+/** 텍스트 응답 델타 이벤트 */
+export interface ResponseTextDeltaEvent extends RealtimeServerEventBase {
+  type: 'response.text.delta';
+  response_id: string;
+  item_id: string;
+  output_index: number;
+  content_index: number;
+  delta: string;
+}
+
+/** 텍스트 응답 완료 이벤트 */
+export interface ResponseTextDoneEvent extends RealtimeServerEventBase {
+  type: 'response.text.done';
+  response_id: string;
+  item_id: string;
+  output_index: number;
+  content_index: number;
+  text: string;
+}
+
+/** 오디오 전사 델타 이벤트 */
+export interface ResponseAudioTranscriptDeltaEvent extends RealtimeServerEventBase {
+  type: 'response.audio_transcript.delta';
+  response_id: string;
+  item_id: string;
+  output_index: number;
+  content_index: number;
+  delta: string;
+}
+
+/** 오디오 전사 완료 이벤트 */
+export interface ResponseAudioTranscriptDoneEvent extends RealtimeServerEventBase {
+  type: 'response.audio_transcript.done';
+  response_id: string;
+  item_id: string;
+  output_index: number;
+  content_index: number;
+  transcript: string;
+}
+
+/** 오디오 응답 델타 이벤트 (WebSocket 전용, WebRTC는 트랙으로 수신) */
+export interface ResponseAudioDeltaEvent extends RealtimeServerEventBase {
+  type: 'response.audio.delta';
+  response_id: string;
+  item_id: string;
+  output_index: number;
+  content_index: number;
+  delta: string;
+}
+
+/** 오디오 응답 완료 이벤트 */
+export interface ResponseAudioDoneEvent extends RealtimeServerEventBase {
+  type: 'response.audio.done';
+  response_id: string;
+  item_id: string;
+  output_index: number;
+  content_index: number;
+}
+
+/** 응답 완료 이벤트 */
+export interface ResponseDoneEvent extends RealtimeServerEventBase {
+  type: 'response.done';
+  response: {
+    id: string;
+    status: 'completed' | 'cancelled' | 'failed';
+    status_details?: {
+      type: string;
+      reason?: string;
+    };
+    output: ResponseOutputItem[];
+    usage?: {
+      input_tokens: number;
+      output_tokens: number;
+      input_token_details?: {
+        cached_tokens: number;
+        text_tokens: number;
+        audio_tokens: number;
+      };
+      output_token_details?: {
+        text_tokens: number;
+        audio_tokens: number;
+      };
+    };
+  };
+}
+
+/** 에러 이벤트 */
+export interface ErrorEvent extends RealtimeServerEventBase {
+  type: 'error';
+  error: {
+    type: string;
+    code?: string;
+    message: string;
+    param?: string;
+  };
+}
+
+/** 속도 제한 업데이트 이벤트 */
+export interface RateLimitsUpdatedEvent extends RealtimeServerEventBase {
+  type: 'rate_limits.updated';
+  rate_limits: Array<{
+    name: string;
+    limit: number;
+    remaining: number;
+    reset_seconds: number;
+  }>;
+}
+
+/** 모든 서버 이벤트 유니온 타입 */
+export type RealtimeServerEvent =
+  | SessionCreatedEvent
+  | SessionUpdatedEvent
+  | SpeechStartedEvent
+  | SpeechStoppedEvent
+  | InputAudioTranscriptionCompletedEvent
+  | ResponseCreatedEvent
+  | ResponseTextDeltaEvent
+  | ResponseTextDoneEvent
+  | ResponseAudioTranscriptDeltaEvent
+  | ResponseAudioTranscriptDoneEvent
+  | ResponseAudioDeltaEvent
+  | ResponseAudioDoneEvent
+  | ResponseDoneEvent
+  | ErrorEvent
+  | RateLimitsUpdatedEvent;
+
+// ============================================================================
+// Realtime API 클라이언트 이벤트 타입 (클라이언트 → 서버)
+// ============================================================================
+
+/** 세션 업데이트 요청 */
+export interface SessionUpdateEvent {
+  type: 'session.update';
+  session: {
+    instructions?: string;
+    voice?: VoiceType;
+    input_audio_format?: AudioFormat;
+    output_audio_format?: AudioFormat;
+    input_audio_transcription?: InputAudioTranscription;
+    turn_detection?: TurnDetection | null;
+    tools?: Tool[];
+    tool_choice?: 'auto' | 'none' | 'required';
+    temperature?: number;
+    max_output_tokens?: number | 'inf';
+  };
+}
+
+/** 응답 생성 요청 */
+export interface ResponseCreateEvent {
+  type: 'response.create';
+  response?: {
+    modalities?: Modality[];
+    instructions?: string;
+    voice?: VoiceType;
+    output_audio_format?: AudioFormat;
+    tools?: Tool[];
+    tool_choice?: 'auto' | 'none' | 'required';
+    temperature?: number;
+    max_output_tokens?: number | 'inf';
+  };
+}
+
+/** 응답 취소 요청 */
+export interface ResponseCancelEvent {
+  type: 'response.cancel';
+}
+
+/** 입력 오디오 버퍼 커밋 */
+export interface InputAudioBufferCommitEvent {
+  type: 'input_audio_buffer.commit';
+}
+
+/** 입력 오디오 버퍼 초기화 */
+export interface InputAudioBufferClearEvent {
+  type: 'input_audio_buffer.clear';
+}
+
+/** 모든 클라이언트 이벤트 유니온 타입 */
+export type RealtimeClientEvent =
+  | SessionUpdateEvent
+  | ResponseCreateEvent
+  | ResponseCancelEvent
+  | InputAudioBufferCommitEvent
+  | InputAudioBufferClearEvent;
+
+// ============================================================================
+// 번역 관련 타입
+// ============================================================================
+
+/** 지원 언어 */
+export type SupportedLanguage = 'ko' | 'pt' | 'en' | 'es' | 'fr' | 'ja' | 'zh';
+
+/** 언어 정보 */
+export interface LanguageInfo {
+  code: SupportedLanguage;
+  name: string;
+  nativeName: string;
+}
+
+/** 번역 방향 */
+export interface TranslationDirection {
+  source: SupportedLanguage;
+  target: SupportedLanguage;
+}
+
+/** 번역 히스토리 항목 */
+export interface TranslationHistoryItem {
+  id: string;
+  timestamp: number;
+  direction: TranslationDirection;
+  inputText: string;
+  outputText: string;
+  inputAudioDuration?: number;
+  outputAudioDuration?: number;
+}
+
+/** 번역 세션 정보 */
+export interface TranslationSession {
+  sessionId: string;
+  clientSecret: string;
+  expiresAt: number;
+  direction: TranslationDirection;
+  voice: VoiceType;
+  connectionState: ConnectionState;
+  translationState: TranslationState;
+  history: TranslationHistoryItem[];
+}

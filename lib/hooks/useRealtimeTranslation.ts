@@ -1,0 +1,337 @@
+'use client';
+
+/**
+ * 실시간 번역 React Hook
+ *
+ * OpenAI Realtime API를 사용한 실시간 음성 번역 기능을 React 컴포넌트에서
+ * 쉽게 사용할 수 있도록 제공하는 커스텀 Hook입니다.
+ */
+
+import { useState, useCallback, useRef, useEffect } from 'react';
+import {
+  RealtimeWebRTCClient,
+  createRealtimeClient,
+} from '@/lib/openai/realtime-client';
+import type {
+  ConnectionState,
+  TranslationState,
+  RealtimeError,
+  RealtimeServerEvent,
+  SupportedLanguage,
+  VoiceType,
+  TranslationHistoryItem,
+} from '@/types/realtime';
+
+/** Hook 반환 타입 */
+export interface UseRealtimeTranslationReturn {
+  /** 현재 연결 상태 */
+  connectionState: ConnectionState;
+  /** 현재 번역 상태 */
+  translationState: TranslationState;
+  /** 에러 정보 */
+  error: RealtimeError | null;
+  /** 입력 음성 전사 텍스트 */
+  inputTranscript: string;
+  /** 출력 번역 텍스트 */
+  outputTranscript: string;
+  /** 번역 히스토리 */
+  history: TranslationHistoryItem[];
+  /** 마이크 음소거 상태 */
+  isMicMuted: boolean;
+  /** 스피커 음소거 상태 */
+  isSpeakerMuted: boolean;
+  /** 연결 시작 */
+  connect: (
+    sourceLanguage: SupportedLanguage,
+    targetLanguage: SupportedLanguage,
+    voice?: VoiceType
+  ) => Promise<void>;
+  /** 연결 해제 */
+  disconnect: () => void;
+  /** 마이크 음소거 토글 */
+  toggleMicMute: () => void;
+  /** 스피커 음소거 토글 */
+  toggleSpeakerMute: () => void;
+  /** 현재 응답 취소 */
+  cancelResponse: () => void;
+  /** 에러 초기화 */
+  clearError: () => void;
+  /** 히스토리 초기화 */
+  clearHistory: () => void;
+}
+
+/** Hook 옵션 */
+export interface UseRealtimeTranslationOptions {
+  /** 이벤트 수신 콜백 */
+  onMessage?: (event: RealtimeServerEvent) => void;
+  /** 번역 완료 콜백 */
+  onTranslationComplete?: (item: TranslationHistoryItem) => void;
+  /** 에러 발생 콜백 */
+  onError?: (error: RealtimeError) => void;
+}
+
+/**
+ * 실시간 번역 Hook
+ *
+ * @example
+ * ```tsx
+ * function TranslationPage() {
+ *   const {
+ *     connectionState,
+ *     translationState,
+ *     inputTranscript,
+ *     outputTranscript,
+ *     connect,
+ *     disconnect,
+ *   } = useRealtimeTranslation();
+ *
+ *   const handleStart = async () => {
+ *     await connect('ko', 'pt', 'verse');
+ *   };
+ *
+ *   return (
+ *     <div>
+ *       <p>상태: {connectionState}</p>
+ *       <p>입력: {inputTranscript}</p>
+ *       <p>번역: {outputTranscript}</p>
+ *       <button onClick={handleStart}>시작</button>
+ *       <button onClick={disconnect}>중지</button>
+ *     </div>
+ *   );
+ * }
+ * ```
+ */
+export function useRealtimeTranslation(
+  options: UseRealtimeTranslationOptions = {}
+): UseRealtimeTranslationReturn {
+  // 상태
+  const [connectionState, setConnectionState] =
+    useState<ConnectionState>('disconnected');
+  const [translationState, setTranslationState] =
+    useState<TranslationState>('idle');
+  const [error, setError] = useState<RealtimeError | null>(null);
+  const [inputTranscript, setInputTranscript] = useState('');
+  const [outputTranscript, setOutputTranscript] = useState('');
+  const [history, setHistory] = useState<TranslationHistoryItem[]>([]);
+  const [isMicMuted, setIsMicMuted] = useState(false);
+  const [isSpeakerMuted, setIsSpeakerMuted] = useState(false);
+
+  // Refs
+  const clientRef = useRef<RealtimeWebRTCClient | null>(null);
+  const currentInputRef = useRef('');
+  const currentOutputRef = useRef('');
+  const directionRef = useRef<{
+    source: SupportedLanguage;
+    target: SupportedLanguage;
+  } | null>(null);
+
+  /**
+   * 히스토리에 번역 항목 추가
+   */
+  const addToHistory = useCallback(
+    (input: string, output: string) => {
+      if (!input.trim() || !output.trim() || !directionRef.current) return;
+
+      const item: TranslationHistoryItem = {
+        id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        timestamp: Date.now(),
+        direction: directionRef.current,
+        inputText: input,
+        outputText: output,
+      };
+
+      setHistory(prev => [item, ...prev].slice(0, 100)); // 최대 100개 유지
+      options.onTranslationComplete?.(item);
+    },
+    [options]
+  );
+
+  /**
+   * 연결 시작
+   */
+  const connect = useCallback(
+    async (
+      sourceLanguage: SupportedLanguage,
+      targetLanguage: SupportedLanguage,
+      voice: VoiceType = 'verse'
+    ) => {
+      // 이미 연결 중이거나 연결된 상태면 무시
+      if (connectionState === 'connecting' || connectionState === 'connected') {
+        console.warn('[useRealtimeTranslation] 이미 연결 중이거나 연결됨');
+        return;
+      }
+
+      setError(null);
+      setInputTranscript('');
+      setOutputTranscript('');
+      currentInputRef.current = '';
+      currentOutputRef.current = '';
+      directionRef.current = { source: sourceLanguage, target: targetLanguage };
+
+      try {
+        // 1. 서버에서 Ephemeral Token 발급
+        const response = await fetch('/api/realtime/session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            instructions: `${sourceLanguage}에서 ${targetLanguage}로의 실시간 번역`,
+            voice,
+            modalities: ['text', 'audio'],
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || '세션 생성에 실패했습니다.');
+        }
+
+        const { client_secret } = await response.json();
+
+        // 2. WebRTC 클라이언트 생성 및 연결
+        clientRef.current = createRealtimeClient({
+          onConnectionStateChange: setConnectionState,
+          onTranslationStateChange: state => {
+            setTranslationState(state);
+
+            // 번역 완료 시 히스토리에 추가
+            if (
+              state === 'idle' &&
+              currentInputRef.current &&
+              currentOutputRef.current
+            ) {
+              addToHistory(currentInputRef.current, currentOutputRef.current);
+              currentInputRef.current = '';
+              currentOutputRef.current = '';
+              setInputTranscript('');
+              setOutputTranscript('');
+            }
+          },
+          onError: err => {
+            setError(err);
+            options.onError?.(err);
+          },
+          onInputTranscript: (transcript, isFinal) => {
+            if (isFinal) {
+              currentInputRef.current = transcript;
+            }
+            setInputTranscript(transcript);
+          },
+          onOutputTranscript: (transcript, isFinal) => {
+            if (isFinal) {
+              currentOutputRef.current = transcript;
+            }
+            setOutputTranscript(transcript);
+          },
+          ...(options.onMessage ? { onMessage: options.onMessage } : {}),
+        });
+
+        await clientRef.current.connect(client_secret);
+
+        // 3. 번역 세션 시작
+        clientRef.current.startTranslation(
+          sourceLanguage,
+          targetLanguage,
+          voice
+        );
+      } catch (err) {
+        const realtimeError: RealtimeError = {
+          type: 'connection',
+          message: err instanceof Error ? err.message : '연결에 실패했습니다.',
+          recoverable: false,
+        };
+        setError(realtimeError);
+        setConnectionState('failed');
+        options.onError?.(realtimeError);
+      }
+    },
+    [connectionState, options, addToHistory]
+  );
+
+  /**
+   * 연결 해제
+   */
+  const disconnect = useCallback(() => {
+    if (clientRef.current) {
+      clientRef.current.disconnect();
+      clientRef.current = null;
+    }
+    setConnectionState('disconnected');
+    setTranslationState('idle');
+    directionRef.current = null;
+  }, []);
+
+  /**
+   * 마이크 음소거 토글
+   */
+  const toggleMicMute = useCallback(() => {
+    if (clientRef.current) {
+      const newMuted = !isMicMuted;
+      clientRef.current.setMicrophoneMuted(newMuted);
+      setIsMicMuted(newMuted);
+    }
+  }, [isMicMuted]);
+
+  /**
+   * 스피커 음소거 토글
+   */
+  const toggleSpeakerMute = useCallback(() => {
+    if (clientRef.current) {
+      const newMuted = !isSpeakerMuted;
+      clientRef.current.setSpeakerMuted(newMuted);
+      setIsSpeakerMuted(newMuted);
+    }
+  }, [isSpeakerMuted]);
+
+  /**
+   * 현재 응답 취소
+   */
+  const cancelResponse = useCallback(() => {
+    if (clientRef.current) {
+      clientRef.current.cancelResponse();
+    }
+  }, []);
+
+  /**
+   * 에러 초기화
+   */
+  const clearError = useCallback(() => {
+    setError(null);
+  }, []);
+
+  /**
+   * 히스토리 초기화
+   */
+  const clearHistory = useCallback(() => {
+    setHistory([]);
+  }, []);
+
+  /**
+   * 컴포넌트 언마운트 시 정리
+   */
+  useEffect(() => {
+    return () => {
+      if (clientRef.current) {
+        clientRef.current.disconnect();
+        clientRef.current = null;
+      }
+    };
+  }, []);
+
+  return {
+    connectionState,
+    translationState,
+    error,
+    inputTranscript,
+    outputTranscript,
+    history,
+    isMicMuted,
+    isSpeakerMuted,
+    connect,
+    disconnect,
+    toggleMicMute,
+    toggleSpeakerMute,
+    cancelResponse,
+    clearError,
+    clearHistory,
+  };
+}
