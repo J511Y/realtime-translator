@@ -34,22 +34,22 @@
   - [x] 세션 만료 시간 관리
   - [x] 요청 속도 제한 구현
 
-#### 1.2 클라이언트 측 WebRTC 구현
+#### 1.2 클라이언트 측 WebRTC 구현 ✅
 
-- [ ] **Realtime 클라이언트 라이브러리** `lib/openai/realtime-client.ts`
-  - [ ] RTCPeerConnection 설정 및 관리
-  - [ ] 마이크 접근 및 오디오 스트림 처리
-  - [ ] SDP Offer/Answer 교환 로직
-  - [ ] DataChannel을 통한 이벤트 통신
-  - [ ] 오디오 재생 및 출력 처리
+- [x] **Realtime 클라이언트 라이브러리** `lib/openai/realtime-client.ts`
+  - [x] RTCPeerConnection 설정 및 관리
+  - [x] 마이크 접근 및 오디오 스트림 처리
+  - [x] SDP Offer/Answer 교환 로직
+  - [x] DataChannel을 통한 이벤트 통신
+  - [x] 오디오 재생 및 출력 처리
 
-#### 1.3 번역 서비스 레이어
+#### 1.3 번역 서비스 레이어 ✅
 
-- [ ] **번역 비즈니스 로직** `services/translation/`
-  - [ ] 언어 감지 및 번역 방향 설정
-  - [ ] 세션 상태 관리 (idle, listening, translating)
-  - [ ] 에러 복구 및 재연결 로직
-  - [ ] 번역 히스토리 관리
+- [x] **번역 비즈니스 로직** `lib/hooks/useRealtimeTranslation.ts` (React Hook으로 구현)
+  - [x] 언어 감지 및 번역 방향 설정
+  - [x] 세션 상태 관리 (idle, listening, processing, speaking)
+  - [x] 에러 복구 및 재연결 로직
+  - [x] 번역 히스토리 관리
 
 #### 1.4 React UI 컴포넌트
 
@@ -60,13 +60,14 @@
   - [ ] LanguageSelector.tsx (언어 선택)
   - [ ] ConnectionStatus.tsx (연결 상태 표시)
 
-#### 1.5 타입 정의 및 유틸리티 (부분 완료)
+#### 1.5 타입 정의 및 유틸리티 ✅
 
 - [x] **Realtime API 타입** `types/realtime.ts`
   - [x] 세션 생성/응답 타입 정의
   - [x] 에러 처리 타입
-  - [ ] WebRTC 연결 관련 타입
-  - [ ] 번역 세션 상태 타입
+  - [x] WebRTC 연결 관련 타입
+  - [x] 번역 세션 상태 타입
+  - [x] 서버/클라이언트 이벤트 타입
 
 ### Phase 2: 이미지 OCR 및 번역 기능 (우선순위: 중간)
 
