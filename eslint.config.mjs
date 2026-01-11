@@ -60,12 +60,12 @@ const eslintConfig = defineConfig([
     },
     settings: {
       'boundaries/elements': [
-        { type: 'app', pattern: 'app/**' },
-        { type: 'components', pattern: 'components/**' },
-        { type: 'services', pattern: 'services/**' },
-        { type: 'lib', pattern: 'lib/**' },
-        { type: 'types', pattern: 'types/**' },
-        { type: 'repositories', pattern: 'repositories/**' },
+        { type: 'app', pattern: '**/app/**' },
+        { type: 'components', pattern: '**/components/**' },
+        { type: 'services', pattern: '**/services/**' },
+        { type: 'lib', pattern: '**/lib/**' },
+        { type: 'types', pattern: '**/types/**' },
+        { type: 'repositories', pattern: '**/repositories/**' },
       ],
     },
   },
