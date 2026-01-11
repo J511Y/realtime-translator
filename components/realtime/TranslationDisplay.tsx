@@ -140,42 +140,31 @@ export function TranslationHistoryCard({
   });
 
   return (
-    <div
-      className={`p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 ${className}`}
-    >
-      {/* 헤더 */}
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-          <span>{sourceLang.nativeName}</span>
-          <svg
-            className="w-3 h-3"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M17 8l4 4m0 0l-4 4m4-4H3"
-            />
-          </svg>
-          <span>{targetLang.nativeName}</span>
+    <div className={className}>
+      <div className="mb-2 flex items-center justify-between">
+        <div className="text-xs text-gray-500 dark:text-gray-400">
+          {sourceLang.nativeName} → {targetLang.nativeName}
         </div>
-        <span className="text-xs text-gray-400 dark:text-gray-500">
+        <div className="text-xs text-gray-400 dark:text-gray-500">
           {formattedTime}
-        </span>
+        </div>
       </div>
 
-      {/* 원문 */}
-      <p className="text-sm text-gray-600 dark:text-gray-300 mb-1">
-        {item.inputText}
-      </p>
+      {/* 원문(위) */}
+      <div className="mb-2 rounded-2xl rounded-tl-md bg-white p-3 text-sm text-gray-800 shadow-sm ring-1 ring-gray-200 dark:bg-gray-900 dark:text-gray-100 dark:ring-gray-800">
+        <div className="mb-1 text-[11px] text-gray-500 dark:text-gray-400">
+          {sourceLang.nativeName}
+        </div>
+        <div className="whitespace-pre-wrap">{item.inputText}</div>
+      </div>
 
-      {/* 번역문 */}
-      <p className="text-sm font-medium text-blue-600 dark:text-blue-400">
-        {item.outputText}
-      </p>
+      {/* 번역문(아래) */}
+      <div className="ml-6 rounded-2xl rounded-tr-md bg-blue-50 p-3 text-sm font-medium text-blue-900 shadow-sm ring-1 ring-blue-200 dark:bg-blue-900/20 dark:text-blue-100 dark:ring-blue-800">
+        <div className="mb-1 text-[11px] font-normal text-blue-700 dark:text-blue-300">
+          {targetLang.nativeName}
+        </div>
+        <div className="whitespace-pre-wrap">{item.outputText}</div>
+      </div>
     </div>
   );
 }
@@ -234,7 +223,7 @@ export function TranslationHistory({
       </div>
 
       {/* 히스토리 목록 */}
-      <div className="space-y-2 max-h-60 overflow-y-auto">
+      <div className="space-y-4 max-h-80 overflow-y-auto">
         {history.map(item => (
           <TranslationHistoryCard key={item.id} item={item} />
         ))}

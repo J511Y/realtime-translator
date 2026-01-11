@@ -6,7 +6,7 @@
  * 모든 번역 관련 컴포넌트를 통합하여 완전한 번역 UI를 제공합니다.
  */
 
-import { useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { useRealtimeTranslation } from '@/lib/hooks/useRealtimeTranslation';
 import type { SupportedLanguage, VoiceType } from '@/types/realtime';
 import { ConnectionStatus } from './ConnectionStatus';
@@ -32,6 +32,12 @@ export interface TranslationInterfaceProps {
   defaultTargetLanguage?: SupportedLanguage;
   /** 기본 음성 */
   defaultVoice?: VoiceType;
+  /** 컴포넌트 로드 시 자동으로 연결 시작 */
+  autoConnect?: boolean;
+  /** 설정 패널(언어/음성 선택) 숨김 */
+  hideSettings?: boolean;
+  /** 히스토리 패널 항상 표시 */
+  alwaysShowHistory?: boolean;
   /** 추가 CSS 클래스 */
   className?: string;
 }
@@ -43,6 +49,9 @@ export function TranslationInterface({
   defaultSourceLanguage = 'ko',
   defaultTargetLanguage = 'pt',
   defaultVoice = 'verse',
+  autoConnect = false,
+  hideSettings = false,
+  alwaysShowHistory = false,
   className = '',
 }: TranslationInterfaceProps) {
   // 언어 및 음성 설정
@@ -53,7 +62,7 @@ export function TranslationInterface({
     defaultTargetLanguage
   );
   const [voice, setVoice] = useState<VoiceType>(defaultVoice);
-  const [showHistory, setShowHistory] = useState(false);
+  const [showHistory, setShowHistory] = useState(alwaysShowHistory);
 
   // 실시간 번역 Hook
   const {
@@ -76,6 +85,34 @@ export function TranslationInterface({
 
   const isConnected = connectionState === 'connected';
   const isConnecting = connectionState === 'connecting';
+
+  const connectRef = useRef(connect);
+  const disconnectRef = useRef(disconnect);
+  const configRef = useRef({ sourceLanguage, targetLanguage, voice });
+  const didAutoConnectRef = useRef(false);
+
+  useEffect(() => {
+    connectRef.current = connect;
+    disconnectRef.current = disconnect;
+  }, [connect, disconnect]);
+
+  useEffect(() => {
+    configRef.current = { sourceLanguage, targetLanguage, voice };
+  }, [sourceLanguage, targetLanguage, voice]);
+
+  useEffect(() => {
+    if (!autoConnect) return;
+    if (didAutoConnectRef.current) return;
+
+    didAutoConnectRef.current = true;
+    const cfg = configRef.current;
+
+    void connectRef.current(cfg.sourceLanguage, cfg.targetLanguage, cfg.voice);
+
+    return () => {
+      disconnectRef.current();
+    };
+  }, [autoConnect]);
 
   /**
    * 번역 시작/중지 핸들러
@@ -160,68 +197,69 @@ export function TranslationInterface({
       )}
 
       {/* 설정 패널 */}
-      <div className="mb-6 p-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-        {/* 언어 선택 */}
-        <LanguageSelector
-          sourceLanguage={sourceLanguage}
-          targetLanguage={targetLanguage}
-          onSourceChange={setSourceLanguage}
-          onTargetChange={setTargetLanguage}
-          disabled={isConnected || isConnecting}
-          className="mb-4"
-        />
+      {!hideSettings && (
+        <div className="mb-6 p-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+          <LanguageSelector
+            sourceLanguage={sourceLanguage}
+            targetLanguage={targetLanguage}
+            onSourceChange={setSourceLanguage}
+            onTargetChange={setTargetLanguage}
+            disabled={isConnected || isConnecting}
+            className="mb-4"
+          />
 
-        {/* 음성 선택 */}
-        <div className="flex items-center gap-4">
-          <div className="flex-1">
-            <label
-              htmlFor="voice-select"
-              className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1"
-            >
-              음성
-            </label>
-            <select
-              id="voice-select"
-              value={voice}
-              onChange={e => setVoice(e.target.value as VoiceType)}
-              disabled={isConnected || isConnecting}
-              className="w-full px-3 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {AVAILABLE_VOICES.map(v => (
-                <option key={v.value} value={v.value}>
-                  {v.label}
-                </option>
-              ))}
-            </select>
+          <div className="flex items-center gap-4">
+            <div className="flex-1">
+              <label
+                htmlFor="voice-select"
+                className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1"
+              >
+                음성
+              </label>
+              <select
+                id="voice-select"
+                value={voice}
+                onChange={e => setVoice(e.target.value as VoiceType)}
+                disabled={isConnected || isConnecting}
+                className="w-full px-3 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {AVAILABLE_VOICES.map(v => (
+                  <option key={v.value} value={v.value}>
+                    {v.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {!alwaysShowHistory && (
+              <button
+                type="button"
+                onClick={() => setShowHistory(!showHistory)}
+                className={`mt-5 p-2 rounded-lg transition-colors ${
+                  showHistory
+                    ? 'bg-blue-100 text-blue-600 dark:bg-blue-900 dark:text-blue-400'
+                    : 'text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700'
+                }`}
+                aria-label="번역 기록"
+              >
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+              </button>
+            )}
           </div>
-
-          {/* 히스토리 토글 버튼 */}
-          <button
-            type="button"
-            onClick={() => setShowHistory(!showHistory)}
-            className={`mt-5 p-2 rounded-lg transition-colors ${
-              showHistory
-                ? 'bg-blue-100 text-blue-600 dark:bg-blue-900 dark:text-blue-400'
-                : 'text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700'
-            }`}
-            aria-label="번역 기록"
-          >
-            <svg
-              className="w-5 h-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-              />
-            </svg>
-          </button>
         </div>
-      </div>
+      )}
 
       {/* 메인 컨텐츠 영역 */}
       {isConnected ? (
@@ -431,7 +469,7 @@ export function TranslationInterface({
       )}
 
       {/* 히스토리 패널 */}
-      {showHistory && (
+      {(alwaysShowHistory || showHistory) && (
         <div className="mt-6 p-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
           <TranslationHistory history={history} onClear={clearHistory} />
         </div>
