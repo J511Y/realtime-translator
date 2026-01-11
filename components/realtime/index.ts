@@ -37,3 +37,6 @@ export type { TranslationDisplayProps } from './TranslationDisplay';
 
 export { TranslationInterface } from './TranslationInterface';
 export type { TranslationInterfaceProps } from './TranslationInterface';
+
+export { DualTranslationInterface } from './DualTranslationInterface';
+export type { DualTranslationInterfaceProps } from './DualTranslationInterface';

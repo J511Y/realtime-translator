@@ -70,6 +70,8 @@ export interface UseRealtimeTranslationOptions {
   onError?: (error: RealtimeError) => void;
 }
 
+const DEFAULT_OPTIONS: UseRealtimeTranslationOptions = {};
+
 /**
  * 실시간 번역 Hook
  *
@@ -102,7 +104,7 @@ export interface UseRealtimeTranslationOptions {
  * ```
  */
 export function useRealtimeTranslation(
-  options: UseRealtimeTranslationOptions = {}
+  options: UseRealtimeTranslationOptions = DEFAULT_OPTIONS
 ): UseRealtimeTranslationReturn {
   // 상태
   const [connectionState, setConnectionState] =
@@ -118,33 +120,46 @@ export function useRealtimeTranslation(
 
   // Refs
   const clientRef = useRef<RealtimeWebRTCClient | null>(null);
+  const connectionStateRef = useRef<ConnectionState>('disconnected');
   const currentInputRef = useRef('');
   const currentOutputRef = useRef('');
   const directionRef = useRef<{
     source: SupportedLanguage;
     target: SupportedLanguage;
   } | null>(null);
+  const optionsRef = useRef(options);
+
+  // options ref 업데이트
+  useEffect(() => {
+    optionsRef.current = options;
+  }, [options]);
+
+  useEffect(() => {
+    connectionStateRef.current = connectionState;
+  }, [connectionState]);
 
   /**
-   * 히스토리에 번역 항목 추가
+   * 히스토리에 번역 항목 추가 (ref 기반으로 클로저 문제 해결)
    */
-  const addToHistory = useCallback(
-    (input: string, output: string) => {
-      if (!input.trim() || !output.trim() || !directionRef.current) return;
+  const addToHistoryRef = useRef((input: string, output: string) => {
+    if (!input.trim() || !output.trim() || !directionRef.current) return;
 
-      const item: TranslationHistoryItem = {
-        id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        timestamp: Date.now(),
-        direction: directionRef.current,
-        inputText: input,
-        outputText: output,
-      };
+    const item: TranslationHistoryItem = {
+      id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      timestamp: Date.now(),
+      direction: { ...directionRef.current },
+      inputText: input,
+      outputText: output,
+    };
 
-      setHistory(prev => [item, ...prev].slice(0, 100)); // 최대 100개 유지
-      options.onTranslationComplete?.(item);
-    },
-    [options]
-  );
+    // 대화형 UX를 위해 아래로 쌓이도록 append한다.
+    setHistory(prev => [...prev, item].slice(-100)); // 최대 100개 유지
+    optionsRef.current.onTranslationComplete?.(item);
+  });
+
+  const addToHistory = useCallback((input: string, output: string) => {
+    addToHistoryRef.current(input, output);
+  }, []);
 
   /**
    * 연결 시작
@@ -156,7 +171,10 @@ export function useRealtimeTranslation(
       voice: VoiceType = 'verse'
     ) => {
       // 이미 연결 중이거나 연결된 상태면 무시
-      if (connectionState === 'connecting' || connectionState === 'connected') {
+      if (
+        connectionStateRef.current === 'connecting' ||
+        connectionStateRef.current === 'connected'
+      ) {
         console.warn('[useRealtimeTranslation] 이미 연결 중이거나 연결됨');
         return;
       }
@@ -199,7 +217,10 @@ export function useRealtimeTranslation(
 
         // 2. WebRTC 클라이언트 생성 및 연결
         clientRef.current = createRealtimeClient({
-          onConnectionStateChange: setConnectionState,
+          onConnectionStateChange: state => {
+            connectionStateRef.current = state;
+            setConnectionState(state);
+          },
           onTranslationStateChange: state => {
             setTranslationState(state);
 
@@ -220,7 +241,10 @@ export function useRealtimeTranslation(
               currentInputRef.current &&
               currentOutputRef.current
             ) {
-              addToHistory(currentInputRef.current, currentOutputRef.current);
+              addToHistoryRef.current(
+                currentInputRef.current,
+                currentOutputRef.current
+              );
               currentInputRef.current = '';
               currentOutputRef.current = '';
             }
@@ -263,7 +287,7 @@ export function useRealtimeTranslation(
         options.onError?.(realtimeError);
       }
     },
-    [connectionState, options, addToHistory]
+    [options, addToHistory]
   );
 
   /**
