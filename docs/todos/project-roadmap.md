@@ -51,14 +51,14 @@
   - [x] 에러 복구 및 재연결 로직
   - [x] 번역 히스토리 관리
 
-#### 1.4 React UI 컴포넌트
+#### 1.4 React UI 컴포넌트 ✅
 
-- [ ] **실시간 번역 인터페이스** `components/realtime/`
-  - [ ] TranslationInterface.tsx (메인 컴포넌트)
-  - [ ] AudioVisualizer.tsx (음성 입력 시각화)
-  - [ ] TranslationDisplay.tsx (번역 결과 표시)
-  - [ ] LanguageSelector.tsx (언어 선택)
-  - [ ] ConnectionStatus.tsx (연결 상태 표시)
+- [x] **실시간 번역 인터페이스** `components/realtime/`
+  - [x] TranslationInterface.tsx (메인 컴포넌트)
+  - [x] AudioVisualizer.tsx (음성 입력 시각화)
+  - [x] TranslationDisplay.tsx (번역 결과 표시)
+  - [x] LanguageSelector.tsx (언어 선택)
+  - [x] ConnectionStatus.tsx (연결 상태 표시)
 
 #### 1.5 타입 정의 및 유틸리티 ✅
 
