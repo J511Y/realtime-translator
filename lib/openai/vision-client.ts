@@ -1,4 +1,8 @@
-import type { ImageTranslateResult, TextBlock } from '@/types/image';
+import type {
+  ImageTranslateResult,
+  TextBlock,
+  TextPosition,
+} from '@/types/image';
 import type { SupportedLanguage } from '@/types/realtime';
 
 /** Vision API 요청 메시지 */
@@ -163,7 +167,8 @@ ${sourceHint}
 다음 작업을 수행해주세요:
 1. 이미지에서 모든 텍스트를 찾아 추출합니다 (간판, 메뉴, 안내문, 라벨 등)
 2. 각 텍스트를 ${targetLangName}로 번역합니다
-3. 텍스트의 맥락과 의미를 설명합니다
+3. 각 텍스트의 이미지 내 위치를 퍼센트 좌표로 추정합니다
+4. 텍스트의 맥락과 의미를 설명합니다
 
 반드시 다음 JSON 형식으로 응답해주세요:
 {
@@ -172,18 +177,31 @@ ${sourceHint}
     {
       "original": "원본 텍스트",
       "translated": "번역된 텍스트",
-      "type": "텍스트 유형 (menu, sign, notice, label, title, body 등)"
+      "type": "텍스트 유형 (menu, sign, notice, label, title, body 등)",
+      "position": {
+        "x": 10,
+        "y": 20,
+        "width": 30,
+        "height": 5
+      }
     }
   ],
   "summary": "이미지에 대한 전체적인 설명과 번역 요약 (${targetLangName}로)",
   "culturalNote": "문화적 맥락이나 추가 설명이 필요한 경우 (선택사항, ${targetLangName}로)"
 }
 
+position 필드 설명:
+- x: 텍스트 좌측 상단의 X 좌표 (이미지 너비 기준 0-100%)
+- y: 텍스트 좌측 상단의 Y 좌표 (이미지 높이 기준 0-100%)
+- width: 텍스트 영역 너비 (이미지 너비 기준 0-100%)
+- height: 텍스트 영역 높이 (이미지 높이 기준 0-100%)
+
 주의사항:
 - 텍스트가 없는 이미지의 경우 textBlocks를 빈 배열로 반환
 - 가격, 숫자 등은 그대로 유지
 - 브랜드명은 원본 그대로 유지하되 발음/의미 설명 추가
-- 메뉴판의 경우 각 메뉴 항목을 개별 블록으로 분리`;
+- 메뉴판의 경우 각 메뉴 항목을 개별 블록으로 분리
+- position은 텍스트가 이미지에서 대략 어디에 있는지 추정하여 제공`;
   }
 
   /**
@@ -204,6 +222,12 @@ ${sourceHint}
           original?: string;
           translated?: string;
           type?: string;
+          position?: {
+            x?: number;
+            y?: number;
+            width?: number;
+            height?: number;
+          };
         }>;
         summary?: string;
         culturalNote?: string;
@@ -226,11 +250,31 @@ ${sourceHint}
           : null;
 
       // TextBlock 배열 검증 및 변환
-      const textBlocks: TextBlock[] = (parsed.textBlocks || []).map(block => ({
-        original: block.original || '',
-        translated: block.translated || '',
-        type: block.type,
-      }));
+      const textBlocks: TextBlock[] = (parsed.textBlocks || []).map(block => {
+        // position 유효성 검사
+        let position: TextPosition | undefined;
+        if (
+          block.position &&
+          typeof block.position.x === 'number' &&
+          typeof block.position.y === 'number' &&
+          typeof block.position.width === 'number' &&
+          typeof block.position.height === 'number'
+        ) {
+          position = {
+            x: Math.max(0, Math.min(100, block.position.x)),
+            y: Math.max(0, Math.min(100, block.position.y)),
+            width: Math.max(0, Math.min(100, block.position.width)),
+            height: Math.max(0, Math.min(100, block.position.height)),
+          };
+        }
+
+        return {
+          original: block.original || '',
+          translated: block.translated || '',
+          type: block.type,
+          position,
+        };
+      });
 
       return {
         detectedLanguage: validDetectedLanguage,

@@ -14,6 +14,18 @@ export interface ImageTranslateRequest {
   targetLanguage: SupportedLanguage;
 }
 
+/** 텍스트 위치 정보 (이미지 기준 퍼센트 좌표) */
+export interface TextPosition {
+  /** 좌측 상단 X 좌표 (0-100%) */
+  x: number;
+  /** 좌측 상단 Y 좌표 (0-100%) */
+  y: number;
+  /** 너비 (0-100%) */
+  width: number;
+  /** 높이 (0-100%) */
+  height: number;
+}
+
 /** 이미지 내 텍스트 블록 정보 */
 export interface TextBlock {
   /** 원본 텍스트 */
@@ -22,6 +34,8 @@ export interface TextBlock {
   translated: string;
   /** 텍스트 유형 (메뉴, 간판, 안내문, 라벨 등) */
   type?: string | undefined;
+  /** 이미지 내 텍스트 위치 (퍼센트 좌표) */
+  position?: TextPosition | undefined;
 }
 
 /** 이미지 번역 결과 */
